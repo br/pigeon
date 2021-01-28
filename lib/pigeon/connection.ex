@@ -92,6 +92,22 @@ defmodule Pigeon.Connection do
     end
   end
 
+  def handle_events(events, from, %{config: config, socket: nil} = state) do
+    case connect_socket(config, 0) do
+      {:ok, socket} ->
+        Configurable.schedule_ping(config)
+
+        handle_events(events, from, %Connection{
+          config: state.config,
+          from: state.from,
+          socket: socket
+        })
+
+      {:error, reason} ->
+        {:stop, reason, state}
+    end
+  end
+
   def handle_events(events, _from, state) do
     state =
       Enum.reduce(events, state, fn {:push, notif, opts}, state ->
