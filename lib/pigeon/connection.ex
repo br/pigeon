@@ -101,13 +101,29 @@ defmodule Pigeon.Connection do
     end
   end
 
-  def handle_events(events, _from, state) do
-    state =
-      Enum.reduce(events, state, fn {:push, notif, opts}, state ->
-        send_push(state, notif, opts)
-      end)
+  def handle_events(events, from, %{config: config, socket: socket} = state) do
+    if socket && Process.alive?(socket) do
+      state =
+        Enum.reduce(events, state, fn {:push, notif, opts}, state ->
+          send_push(state, notif, opts)
+        end)
 
-    {:noreply, [], state}
+      {:noreply, [], state}
+    else
+      case connect_socket(config, 0) do
+        {:ok, socket} ->
+          Configurable.schedule_ping(config)
+
+          handle_events(events, from, %Connection{
+            config: state.config,
+            from: state.from,
+            socket: socket
+          })
+
+        {:error, reason} ->
+          {:stop, reason, state}
+      end
+    end
   end
 
   def process_end_stream(%Stream{id: stream_id} = stream, state) do
